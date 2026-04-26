@@ -1,11 +1,12 @@
 #include "malloc.h"
 #include <stdint.h>  // SIZE_MAX
 #include <string.h> // memset, memcpy
+#include <unistd.h>  // sbrk
 
 // The first block in our heap managed linked list
 // NULL means no allocation till now
 
-block_header_t *head_start = NULL;
+block_header_t *heap_start = NULL;
 
 #define ALIGNMENT 8
 #define MIN_SPLIT_SIZE 8
@@ -49,7 +50,7 @@ static block_header_t *find_free_block (size_t size)
         {
             return curr;
         }
-
+        curr = curr->next;
     }
     return NULL;
 }
@@ -61,5 +62,282 @@ static block_header_t *request_space(block_header_t *last,size_t size)
 {
     void * block_mem=(sbrk(sizeof(block_header_t)+size));
 
+    if(block_mem == (void *)-1)
+    {
+        return NULL;
+    }
+
+    block_header_t * block = (block_header_t *)block_mem;
+    block-> size=size;
+    block-> is_free=0;
+    block->next =NULL;
+    block-> prev =last;
+
+    if(last != NULL)
+    {
+        last->next=block;
+    }
+    return block;
+ 
+}
+
+// Splitting a large free block into : 
+// - 1 block of requested size
+// - Left over as free block
+
+// Splitting will happen only of the requested size large enough ti hold another header plus MIN_SPLIT_SIZE Bytes;
+
+static void split_block(block_header_t *block, size_t size)
+{
+    if(block==NULL)
+    {
+         return;
+    }
+
+    // Splinter prevention, if after splitting it is so small that a header also couldn't be inserted than it is of no use, hence it will return without splitting
+    if(block->size < size + sizeof(block_header_t) + MIN_SPLIT_SIZE)
+    {
+        return;
+    }
+
+    block_header_t *new_block = (block_header_t *)((char *)(block+1) +size); 
+    // Converted to char to make compiler understand not to follow pointer arithmetic
+
+    new_block->size=block->size -size -sizeof(block_header_t);
+    new_block->is_free=1;
+    new_block->next=block->next;
+    new_block->prev=block;
+
+    if(new_block->next != NULL)
+    {
+        new_block->next->prev = new_block;
+    }
+
+    block->next=new_block;
+    block->size=size;
     
+}
+
+// IMP: The original block is shrinking to fit the memory requested by user. So the new block which we are making will be of free space will be at higer memory addresses. 
+// Lower Memory Addresses -----------------------------> Higher Memory Addresses
+// [ Original Header ] [ User Payload ] | [ New Header ] [ Leftover Free Space ]
+// ^^^^^^^^^^^^^^^^^^^
+// Stays exactly where it is. For minimum changes
+
+
+// Coalesce
+// Merging a free block with nearby free block 
+// This reduces the fragmentation and keeps memory reusable
+
+static void coalesce(block_header_t * block)
+{
+    if(block==NULL)
+    {
+        return;
+    }
+
+    // Merge with next free block if possible
+    if(block->next != NULL && block->next->is_free)
+    {
+        block_header_t *next=block->next;
+        block->size+= ( sizeof(block_header_t)+next->size);
+        block->next =next->next;
+
+        if(block->next !=NULL)
+        {
+            block->next->prev =block;
+        }
+    }
+
+    // Merge with previous free block if possible
+    
+    if(block->prev != NULL && block->prev->is_free)
+    {
+        block_header_t * prev =block->prev;
+        prev->size+= sizeof(block_header_t) +block->size;
+        prev->next= block->next;
+
+        if(prev->next !=NULL)
+        {
+            prev->next->prev =prev;
+        }
+
+        block=prev;
+
+
+        // After merging backward let's also cehck if it can again merge forward
+
+        if(block->next != NULL && block->next->is_free)
+        {
+            block_header_t *next=block->next;
+            block->size+= ( sizeof(block_header_t)+next->size);
+            block->next =next->next;
+
+            if(block->next !=NULL)
+            {
+                block->next->prev =block;
+            }
+        }
+    }
+
+}
+
+
+// The main program will call this 'my_malloc' function
+
+void * my_malloc(size_t size)
+{
+    block_header_t * block;
+    size_t aligned_size;
+    if(size ==0)
+    {
+        return NULL;
+    }
+
+    aligned_size=align8(size);
+
+    // 1st allocation: Create the initial block if it the list is empty
+
+    if( heap_start ==NULL)
+    {
+        block= request_space(NULL, aligned_size);
+        if(block == NULL)
+        {
+            return NULL;
+        }
+
+        heap_start = block;
+
+        return (void *)(block +1);
+    }
+
+    // If the list if alreay there:
+    // Trying to reuse the exsisting free blocks
+
+    block = find_free_block(aligned_size);
+    if(block != NULL)
+    {
+        split_block(block,aligned_size);
+        block->is_free=0;
+        return (void *)(block +1);
+    }
+
+    // Still not suitable memory block found, so requestiong fresh memory from OS
+
+    block_header_t * last =get_last_block();
+    block = request_space(last,aligned_size);
+
+    if(block==NULL)
+    {
+        return NULL;
+    }
+
+    return (void *)(block +1);
+
+
+}
+
+// As no garbage collector, manually the code will need to free the space which was previously allocated by 'my_alloc'
+
+void my_free(void *ptr)
+{
+    block_header_t * block;
+
+    if(ptr ==NULL)
+    {
+        return;
+    }
+
+    // This will be user pointer
+    // So first step will be manually steping back so we point it to block header
+
+    block= ((block_header_t *)ptr)-1;
+    // Everwhere we are using pointer arithmetic so the C compiler knows that to come back a whole unit of 'block_header_t'
+
+    block->is_free=1;
+
+    // Now let's try to merge them
+
+    coalesce(block);
+
+}
+
+// Custom calloc which will set default value 0 in the memory before giving it to code
+
+void * my_calloc(size_t nelem,size_t elem_size)
+{
+    size_t total;
+    void *ptr;
+
+    // To Prevent integer overflow in multiplication
+
+    if(nelem != 0 && elem_size > SIZE_MAX /nelem)
+    {
+        return NULL;
+    }
+
+    total = nelem * elem_size;
+    ptr= my_malloc(total);
+
+    if( ptr != NULL)
+    {
+        memset (ptr,0, total);
+    }
+
+    return ptr;
+
+
+}
+
+
+// Multi purpose Realloc
+
+void *my_realloc(void *ptr, size_t size)
+{
+
+    block_header_t * block;
+    void * new_ptr;
+    size_t aligned_size;
+    size_t copy_size;
+
+    // realloc(NULL, Size) behaves like malloc(size)
+    if(ptr==NULL)
+    {
+        return my_malloc(size);
+    }
+    // realloc(ptr, 0) behaves like free(ptr)
+    if(size == 0)
+    {
+        my_free(ptr);
+        return NULL;
+    }
+
+    aligned_size =align8(size);
+    block=((block_header_t *)ptr) -1;
+
+    // If the current block is large enough, Reuse it
+    // Also split it if any leftover space is there
+
+    if(block->size >= aligned_size)
+    {
+        split_block(block,aligned_size);
+        return ptr;
+    }
+
+    // If not allocate a new block, copy data as it is, free old block
+
+    new_ptr =my_malloc(aligned_size);
+    if(new_ptr==NULL)
+    {
+        return NULL;
+    }
+
+    copy_size =block->size;
+    memcpy(new_ptr,ptr,copy_size);
+
+    my_free(ptr);
+
+    return new_ptr;
+
+
 }
