@@ -53,3 +53,6 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+test_split_coalesce
+sample_c
