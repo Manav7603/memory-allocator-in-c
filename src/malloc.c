@@ -38,22 +38,38 @@ static block_header_t *get_last_block(void)
     return curr;
 }
 
+// Earlier Version // Finding the first free block that satisfy the request i.e 1st free block whose size is greater than the requested size
+// Earlier Version // For now making it first fit strategy
 
-// Finding the first free block that satisfy the request i.e 1st free block whose size is greater than the requested size
-// For now making it first fit strategy
+// Finding the smallest free block that satisfy the request
+// Collective Best-fit strategy: finds the free block with the smallest size that still fits
+// This reduces fragmentation by leaving larger blocks for future allocations
 
 static block_header_t *find_free_block (size_t size)
 {
-    block_header_t *curr= heap_start;
+    block_header_t *curr = heap_start;
+    block_header_t *best_fit = NULL;
+    size_t best_size = SIZE_MAX;
+    
     while(curr != NULL)
     {
         if(curr->is_free && curr->size >= size)
         {
-            return curr;
+            // return curr; // For First Fit
+            if(curr->size == size)
+            {
+                return curr;
+            }
+
+            if(curr->size < best_size)
+            {
+                best_fit = curr;
+                best_size = curr->size;
+            }
         }
         curr = curr->next;
     }
-    return NULL;
+    return best_fit;
 }
 
 // Asking the "OS" for more heap memory using mmap
