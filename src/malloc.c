@@ -1,7 +1,8 @@
 #include "malloc.h"
 #include <stdint.h>  // SIZE_MAX
 #include <string.h> // memset, memcpy
-#include <unistd.h>  // sbrk
+// #include <unistd.h>  // sbrk
+#include <sys/mman.h>  // mmap
 
 // The first block in our heap managed linked list
 // NULL means no allocation till now
@@ -55,14 +56,18 @@ static block_header_t *find_free_block (size_t size)
     return NULL;
 }
 
-// Asking the "OS" for more heap memory using sbrk
+// Asking the "OS" for more heap memory using mmap
 // Returned block contains both the header and the user region
 
 static block_header_t *request_space(block_header_t *last,size_t size)
 {
-    void * block_mem=(sbrk(sizeof(block_header_t)+size));
 
-    if(block_mem == (void *)-1)
+    // In sbrk we did (sbrk(sizeof(block_header_t)+size));
+    void * block_mem = mmap(NULL, sizeof(block_header_t)+size,
+                           PROT_READ | PROT_WRITE,
+                           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+    if(block_mem == MAP_FAILED) // In sbrk we did ((void *)-1)
     {
         return NULL;
     }
