@@ -38,6 +38,12 @@ test-valgrind: $(TEST_SPLIT)
 	@echo "🔍 Running Valgrind Memory Checks..."
 	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./$(TEST_SPLIT)
 
+# Run tests using Apple/Google's modern AddressSanitizer (Best for macOS)
+test-asan:
+	@echo "🩻 Running AddressSanitizer Memory Checks..."
+	$(CC) $(CFLAGS) -fsanitize=address $(INCLUDE) $(SRC) tests/test_split_coalesce.c -o test_split_coalesce_asan
+	./test_split_coalesce_asan
+
 # Clean build artifacts
 clean:
 	@echo "🧹 Cleaning up..."

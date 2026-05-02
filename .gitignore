@@ -57,3 +57,4 @@ dkms.conf
 test_split_coalesce
 sample_c
 TODO.md
+test_split_coalesce_asan

@@ -60,16 +60,23 @@ void *my_malloc(size_t size)
 
     // If the list if alreay there:
     // Trying to reuse the exsisting free blocks
-
+    // O(1) Search for an existing free block
     block = find_free_block(aligned_size);
     if(block != NULL)
     {
+        // CRITICAL UPDATE: We found a block. We MUST remove it from the free bins
+        // immediately so no other allocation can claim it!
+        remove_free_block(block);
+
+        // Split the block if it is too large. 
+        // (split_block will automatically insert the leftover piece back into the bins).
+
         split_block(block, aligned_size);
         block->is_free = 0;
         return (void *)(block + 1);
     }
 
-    // Still not suitable memory block found, so requestiong fresh memory from OS
+    // Still not suitable memory block found, so requestiong fresh memory from OS;  No free blocks available, ask the OS for a new 4MB Arena
 
     block_header_t *last = get_last_block();
     block = request_space(last, aligned_size);
@@ -104,6 +111,8 @@ void my_free(void *ptr)
     block->is_free = 1;
 
     // Now let's try to merge them
+    // Merge physical neighbors, which automatically inserts the 
+    // resulting massive block into the correct O(1) bin!
     coalesce(block);
 }
 
@@ -160,7 +169,7 @@ void *my_realloc(void *ptr, size_t size)
 
     // If the current block is large enough, Reuse it
     // Also split it if any leftover space is there
-
+    // In-place split
     if(block->size >= aligned_size)
     {
         split_block(block, aligned_size);
