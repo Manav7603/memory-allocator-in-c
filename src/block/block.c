@@ -1,11 +1,32 @@
+/* =========================================================================
+ * FILE: block.c
+ * PURPOSE: Implements core block operations: alignment, splitting, coalescing.
+ * ========================================================================= */
+
 #include "block.h"
 
+
+/**
+ * @brief Rounds a requested size up to the nearest multiple of 8.
+ * 
+ * Ensures all memory addresses returned to the user are properly aligned 
+ * for hardware efficiency and vector instruction compatibility.
+ * 
+ * @param size The raw requested size.
+ * @return size_t The 8-byte aligned size.
+ */
 // Round a size up to the nearest multiple of 8
 INTERNAL size_t align8(size_t size)
 {
     return (size + (ALIGNMENT - 1)) & ~((size_t)(ALIGNMENT - 1));
 }
 
+
+/**
+ * @brief Traverses the heap to find the very last block.
+ * 
+ * @return block_header_t* Pointer to the last block, or NULL if heap is empty.
+ */
 // Return the last block in the heap linked list
 INTERNAL block_header_t *get_last_block(void)
 {
@@ -24,6 +45,16 @@ INTERNAL block_header_t *get_last_block(void)
     return curr;
 }
 
+
+/**
+ * @brief Splits a large free block to carve out a specific size.
+ * 
+ * Includes Splinter Prevention: Refuses to split if the remaining space 
+ * is too small to hold a new block header and minimum payload.
+ * 
+ * @param block Pointer to the free block being split.
+ * @param size The payload size being carved out (aligned).
+ */
 // Splitting will happen only if the requested size is large enough to hold another header plus MIN_SPLIT_SIZE Bytes;
 INTERNAL void split_block(block_header_t *block, size_t size)
 {
@@ -54,6 +85,16 @@ INTERNAL void split_block(block_header_t *block, size_t size)
     block->size = size;
 }
 
+
+/**
+ * @brief Merges a freed block with adjacent free blocks.
+ * 
+ * Checks both forward and backward in the heap. If neighbors are also 
+ * marked as free, their metadata is combined into a single, massive block 
+ * to combat external fragmentation.
+ * 
+ * @param block Pointer to the block that was just freed.
+ */
 // Coalesce: Merging a free block with nearby free block 
 INTERNAL void coalesce(block_header_t * block)
 {

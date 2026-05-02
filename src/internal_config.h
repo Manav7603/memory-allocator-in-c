@@ -10,6 +10,14 @@
 #ifndef INTERNAL_CONFIG_H
 #define INTERNAL_CONFIG_H
 
+
+/**
+ * @def INTERNAL
+ * @brief Compiler directive to hide symbols from the global export table.
+ * 
+ * Enforces strict encapsulation by preventing external binaries from 
+ * linking to or hijacking internal allocator functions.
+ */
 #if defined(__GNUC__) || defined(__clang__)
     #define INTERNAL __attribute__((visibility("hidden")))
 #else

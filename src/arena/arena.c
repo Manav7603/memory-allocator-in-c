@@ -1,6 +1,7 @@
 /* =========================================================================
  * FILE: arena.c
- * PURPOSE: Implements memory requests to the Linux Kernel using Arenas.
+ * PURPOSE: Implements memory requests to the Linux Kernel using Arenas. 
+ * Handles system calls and 4MB Arena pre-allocation via mmap.
  * ENHANCEMENT: We now request memory in massive chunks (Arenas) and 
  * instantly split them. This destroys the mmap overhead bottleneck!
  * ========================================================================= */
@@ -14,6 +15,18 @@
 // Standard OS page size for alignment (4 KB)
 #define PAGE_SIZE 4096
 
+
+/**
+ * @brief Requests raw memory from the Operating System.
+ * 
+ * Over-allocates by requesting massive 4MB chunks (Arenas) to minimize 
+ * kernel context-switching overhead. Instantly splits the requested size 
+ * and leaves the remainder in the free list.
+ * 
+ * @param last Pointer to the current tail of the heap linked list.
+ * @param size The required payload size.
+ * @return block_header_t* Pointer to the newly mapped block, or NULL on failure.
+ */
 INTERNAL block_header_t *request_space(block_header_t *last, size_t size)
 {
     // 1. How much memory do we actually need at a minimum?

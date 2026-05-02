@@ -1,3 +1,8 @@
+/* =========================================================================
+ * FILE: block.h
+ * PURPOSE: Internal definitions for memory blocks and the global heap.
+ * ========================================================================= */
+
 #ifndef BLOCK_H
 #define BLOCK_H
 
@@ -9,6 +14,14 @@
 
 // BLOCK HEADER STRUCTURE 
 // Fully defined here in the private source folder.
+
+/**
+ * @struct block_header
+ * @brief The metadata header attached to every allocated and free block.
+ * 
+ * This structure sits strictly behind the pointer returned to the user.
+ * It manages the doubly-linked list of the heap state.
+ */
 typedef struct block_header
 {
     size_t size;                       // Dynamic size of user data
