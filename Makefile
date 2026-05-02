@@ -1,38 +1,48 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -Werror -Wno-deprecated-declarations -g -O2
-INCLUDE = -Isrc
+# Added -fvisibility=hidden to ensure our internal functions stay completely secure
+CFLAGS = -Wall -Wextra -Werror -Wno-deprecated-declarations -g -O2 -fvisibility=hidden
+# Look for headers in both the public 'include' folder and internal 'src' folder
+INCLUDE = -Iinclude -Isrc
 
-# Source and test files
-SRC = src/malloc.c
-HEADER = src/malloc.h
+# All our new modular source files
+SRC = src/malloc.c \
+      src/block/block.c \
+      src/arena/arena.c \
+      src/strategy/strategy.c
 
-# Test targets
+# Test binaries
 TEST_SPLIT = test_split_coalesce
 TEST_SAMPLE = sample_c
 
-.PHONY: all test test-valgrind clean help test_split_coalesce sample_c
+.PHONY: all test test-valgrind clean help
 
 all: $(TEST_SPLIT) $(TEST_SAMPLE)
 
-# Compile test_split_coalesce
-$(TEST_SPLIT): $(SRC) tests/test_split_coalesce.c $(HEADER)
+# Compile the core allocator test
+$(TEST_SPLIT): $(SRC) tests/test_split_coalesce.c
+	@echo "🛠️ Compiling memory allocator and test suite..."
 	$(CC) $(CFLAGS) $(INCLUDE) $(SRC) tests/test_split_coalesce.c -o $(TEST_SPLIT)
 
-# Compile sample_c
+# Compile a sample user program
 $(TEST_SAMPLE): tests/sample_c.c
-	$(CC) $(CFLAGS) tests/sample_c.c -o $(TEST_SAMPLE)
+	@echo "🛠️ Compiling sample user program..."
+	$(CC) $(CFLAGS) $(INCLUDE) tests/sample_c.c -o $(TEST_SAMPLE)
 
-# Run all tests
+# Run the split/coalesce test
 test: $(TEST_SPLIT)
+	@echo "🚀 Running Test Suite..."
 	./$(TEST_SPLIT)
 
-# Run split/coalesce test with valgrind (memory checking)
+# Run tests with memory leak detection (Valgrind)
 test-valgrind: $(TEST_SPLIT)
-	valgrind --leak-check=full --show-leak-kinds=all ./$(TEST_SPLIT)
+	@echo "🔍 Running Valgrind Memory Checks..."
+	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes ./$(TEST_SPLIT)
 
 # Clean build artifacts
 clean:
+	@echo "🧹 Cleaning up..."
 	rm -f $(TEST_SPLIT) $(TEST_SAMPLE) *.o
+	rm -rf *.dSYM
 
 # Display help
 help:
